@@ -22,4 +22,9 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + process.env.PORT + '/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
+# Unraid reads these for the Docker tab: the icon, and the WebUI button. [PORT:80] becomes
+# whichever host port is mapped to the container's port 80.
+LABEL net.unraid.docker.icon="https://raw.githubusercontent.com/Aerowinder/jembex-dedupe/main/public/logo.png" \
+      net.unraid.docker.webui="http://[IP]:[PORT:80]/"
+
 ENTRYPOINT ["./entrypoint.sh"]

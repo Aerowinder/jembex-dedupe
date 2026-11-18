@@ -52,19 +52,20 @@ The app doesn't run as root. At startup the container gives `/app/serverconfig` 
 
 ### Unraid
 
-1. Go to the **Docker** tab → **Add Container**.
+1. Go to the **Docker** tab → **Add Container**, and switch on **Advanced View** (top right) so the Icon URL and WebUI fields show.
 2. Fill in:
    | Field | Value |
    |---|---|
    | Name | `Jembex-Dedupe` |
    | Repository | `ghcr.io/aerowinder/jembex-dedupe:latest` |
-   | WebUI | `http://[IP]:[PORT:3369]/` |
+   | Icon URL | `https://raw.githubusercontent.com/Aerowinder/jembex-dedupe/main/public/logo.png` |
+   | WebUI | `http://[IP]:[PORT:80]/` |
 3. **Add another Port**: container port `80`, host port `3369` (or any free port).
 4. **Add another Path**: container path `/app/serverconfig`, host path `/mnt/user/appdata/jembex-dedupe`.
 5. **Add another Variable**: key `PUID`, value `99`. Then another: key `PGID`, value `100`.
 6. Click **Apply**, then open the WebUI from the Docker tab.
 
-**Coming from JellEmPlex Dedupe?** Edit the container and change **Repository** to `ghcr.io/aerowinder/jembex-dedupe:latest`; the old image name no longer gets updates. Your saved servers carry over if `/app/serverconfig` is mapped. Files from older versions, kept in `emby/`, `jellyfin/` and `plex/` subfolders, are moved into the main folder automatically on first start.
+**Coming from JellEmPlex Dedupe?** Edit the container and change **Repository** to `ghcr.io/aerowinder/jembex-dedupe:latest`; the old image name no longer gets updates. Fill in **Icon URL** and **WebUI** as above while you're there. Your saved servers carry over if `/app/serverconfig` is mapped. Files from older versions, kept in `emby/`, `jellyfin/` and `plex/` subfolders, are moved into the main folder automatically on first start.
 
 ### Docker Compose
 
