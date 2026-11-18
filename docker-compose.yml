@@ -1,0 +1,13 @@
+services:
+  jembex-dedupe:
+    image: ghcr.io/aerowinder/jembex-dedupe:latest
+    container_name: jembex-dedupe
+    ports:
+      - "3369:80"
+    environment:
+      - PUID=1000   # owner of ./serverconfig on the host (Unraid: 99)
+      - PGID=1000   # (Unraid: 100)
+      # - ALLOWED_HOSTS=nas.lan,192.168.1.10   # optional: names/addresses you open the app by
+    volumes:
+      - ./serverconfig:/app/serverconfig   # saved servers (contain API keys) and ignore lists
+    restart: unless-stopped

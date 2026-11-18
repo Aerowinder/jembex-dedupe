@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jembex Dedupe</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="top-right-controls">
+        <button type="button" class="icon-btn theme-toggle" title="Toggle dark/light mode">🌓</button>
+    </div>
+
+    <main class="container">
+        <header class="header">
+            <img src="logo.svg" alt="" class="logo" width="96" height="96">
+            <h1>JEMBEX DEDUPE</h1>
+            <p class="description">A dedupe tool for Jellyfin, Emby and Plex</p>
+            <p class="credit">Created by SpaceInvaderOne · updated and maintained by Aerowinder</p>
+        </header>
+
+        <form id="scanForm" class="card" autocomplete="off">
+            <label class="field">
+                <span class="field-label">Server</span>
+                <select id="serverType">
+                    <option value="emby">Emby</option>
+                    <option value="jellyfin">Jellyfin</option>
+                    <option value="plex">Plex</option>
+                </select>
+            </label>
+
+            <label class="field">
+                <span class="field-label">Server URL</span>
+                <input type="text" id="serverUrl" placeholder="Server URL (e.g., server.domain.com:8096)">
+            </label>
+
+            <label class="field">
+                <span class="field-label" id="apiKeyLabel">API key</span>
+                <input type="text" id="apiKey" placeholder="API Key" spellcheck="false">
+            </label>
+
+            <div class="field" id="savedConfigs" hidden>
+                <label class="field-label" for="configSelect">Saved servers</label>
+                <div class="field-row">
+                    <select id="configSelect">
+                        <option value="">Choose…</option>
+                    </select>
+                    <button type="button" id="loadConfigBtn" class="btn btn-secondary">Load</button>
+                    <button type="button" id="deleteConfigBtn" class="btn btn-secondary btn-danger">Delete</button>
+                </div>
+            </div>
+
+            <label class="checkbox">
+                <input type="checkbox" id="saveConfig">
+                <span>Save this server</span>
+            </label>
+
+            <p class="note note-warning" role="note">
+                Saved API keys stay in this container and are never shown again, but anyone who can open
+                this page can scan your saved servers. Only run Jembex Dedupe on a network you trust,
+                and don't expose it to the internet.
+            </p>
+
+            <div class="divider"></div>
+
+            <button type="submit" id="loadLibrariesBtn" class="btn btn-primary">Load libraries</button>
+
+            <div class="field" id="libraryPicker" hidden>
+                <div class="field-label-row">
+                    <span class="field-label">Libraries to scan</span>
+                    <span class="field-links">
+                        <button type="button" id="toggleAllLibraries" class="link-btn">Select all</button>
+                        <button type="button" id="reloadLibraries" class="link-btn">Reload</button>
+                    </span>
+                </div>
+                <div id="libraryList" class="library-list" role="group" aria-label="Libraries to scan"></div>
+                <button type="button" id="scanBtn" class="btn btn-primary">Scan</button>
+            </div>
+        </form>
+
+        <div id="results"></div>
+
+        <footer class="footer">
+            <span id="appVersion"></span> ·
+            <a href="https://github.com/Aerowinder/jembex-dedupe" target="_blank" rel="noopener">GitHub</a> ·
+            MIT License
+        </footer>
+    </main>
+
+    <div id="loading-overlay" class="hidden">
+        <div class="progress-label">Processing...</div>
+        <div class="progress indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-fill"></div>
+        </div>
+        <div class="progress-count"></div>
+        <button type="button" id="cancelScan" class="btn btn-secondary">Cancel</button>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

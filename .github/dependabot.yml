@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # The Dockerfile pins node:26-alpine by digest, so each time that image is rebuilt (a Node
+  # 26 patch release, Alpine security fixes) Dependabot opens a PR with the new digest. The
+  # tests run on the PR; merging it rebuilds and publishes the Jembex image.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: daily
+    ignore:
+      # Stay on Node 26: moving to a new major version is a deliberate change, not a PR
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: docker
+
+  # GitHub Actions used by CI, in one weekly PR
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  # No npm entry: the app has no npm dependencies.

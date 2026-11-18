@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <title>Jembex Dedupe</title>
+  <!-- Stacked copies of one file. Gaps are cut out, so it sits on any background. -->
+  <defs>
+    <mask id="m1">
+      <rect width="128" height="128" fill="#fff"/>
+      <path d="M39 19H77.0L99 41.0V95Q99 109 85 109H39Q25 109 25 95V33Q25 19 39 19Z" fill="#000"/>
+    </mask>
+    <mask id="m2">
+      <rect width="128" height="128" fill="#fff"/>
+      <path d="M61 37H99.0L121 59.0V113Q121 127 107 127H61Q47 127 47 113V51Q47 37 61 37Z" fill="#000"/>
+    </mask>
+  </defs>
+  <g mask="url(#m1)"><g mask="url(#m2)"><path d="M17 6H52.0L72 26.0V77Q72 86 63 86H17Q8 86 8 77V15Q8 6 17 6Z" fill="#00a4dc"/><path d="M52 6V20Q52 26 58 26H72Z" fill="#0079a3"/></g></g>
+  <g mask="url(#m2)"><path d="M39 24H74.0L94 44.0V95Q94 104 85 104H39Q30 104 30 95V33Q30 24 39 24Z" fill="#52c234"/><path d="M74 24V38Q74 44 80 44H94Z" fill="#3c8f25"/></g>
+  <path d="M61 42H96.0L116 62.0V113Q116 122 107 122H61Q52 122 52 113V51Q52 42 61 42Z" fill="#e5a00d"/><path d="M96 42V56Q96 62 102 62H116Z" fill="#a87508"/><rect x="65" y="80" width="38" height="6" rx="3" fill="#fff"/><rect x="65" y="92" width="38" height="6" rx="3" fill="#fff"/><rect x="65" y="104" width="23" height="6" rx="3" fill="#fff"/>
+</svg>
