@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.3, 2026-11-19
+
+- Prepare for Unraid CA release.
+- Remove SIO credit from main page, persist in documentation and licensing.
+
 ## 2.0.2, 2026-11-19
 
 - The warning about saved API keys now only shows while the save checkbox is ticked.

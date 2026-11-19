@@ -1,6 +1,6 @@
 {
   "name": "jembex-dedupe",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Duplicate movie and TV episode finder for Jellyfin, Emby, and Plex",
   "repository": "github:Aerowinder/jembex-dedupe",
   "type": "module",
