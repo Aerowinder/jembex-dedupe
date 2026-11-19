@@ -3,6 +3,18 @@ name: Test, build and publish Docker image
 on:
   push:
     branches: [main]
+    # Only rebuild when something that goes into the image changes, so a README edit doesn't
+    # publish a new image (and an "update ready" on Unraid). Keep in step with the Dockerfile's
+    # COPY lines. Tag pushes ignore this filter and always build.
+    paths:
+      - Dockerfile
+      - entrypoint.sh
+      - server.js
+      - package.json
+      - LICENSE
+      - lib/**
+      - public/**
+      - .github/workflows/docker.yml
     tags: ['v*']
   pull_request:
   workflow_dispatch:
