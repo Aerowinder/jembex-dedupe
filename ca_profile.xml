@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<Maintainer>
+  <Profile>Maintainer of Jembex Dedupe, a read-only duplicate finder for Jellyfin, Emby and Plex. It's a fork of JellEmPlex Dedupe by SpaceinvaderOne, updated for Jellyfin 12 with TV episode support, library selection, ignore lists and exports. Bug reports and feature requests are welcome on GitHub.</Profile>
+  <Icon>https://raw.githubusercontent.com/Aerowinder/jembex-dedupe/main/public/logo.png</Icon>
+  <WebPage>https://github.com/Aerowinder/jembex-dedupe</WebPage>
+</Maintainer>
