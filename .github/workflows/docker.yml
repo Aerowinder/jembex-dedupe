@@ -18,6 +18,14 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      title:
+        description: Name for this run in the Actions list (e.g. 2.0.2)
+        required: false
+
+# A manual run is listed under the title given; when it's empty (and for every other event),
+# GitHub uses its usual name: the commit message, PR title, or workflow name
+run-name: ${{ inputs.title }}
 
 permissions:
   contents: read
