@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2, 2026-11-19
+
+- The warning about saved API keys now only shows while the save checkbox is ticked.
+
 ## 2.0.1, 2026-11-19
 
 - When a scan completes, the server connection dialog will collapse, allowing you to see the results without scrolling.

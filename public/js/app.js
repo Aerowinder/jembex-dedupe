@@ -21,6 +21,7 @@ const form = {
     key: $('apiKey'),
     keyLabel: $('apiKeyLabel'),
     save: $('saveConfig'),
+    saveWarning: $('saveWarning'),
     configs: $('savedConfigs'),
     configSelect: $('configSelect'),
     configLoad: $('loadConfigBtn'),
@@ -236,6 +237,7 @@ async function saveConfig(serverType, serverUrl, apiKey) {
         if (!response.ok) throw new Error((await response.json()).error);
         notify(`Saved "${serverUrl}"`, 'success');
         form.save.checked = false;
+        updateSaveWarning();
         await refreshConfigs();
         return true;
     } catch (err) {
@@ -354,6 +356,11 @@ async function loadLibraries() {
         form.loadLibraries.disabled = false;
         form.loadLibraries.textContent = 'Load libraries';
     }
+}
+
+// The warning about saved keys shows only while "Save this server" is ticked
+function updateSaveWarning() {
+    form.saveWarning.hidden = !form.save.checked;
 }
 
 // ---------- Collapsed form ----------
@@ -497,6 +504,7 @@ const storedType = store.get('serverType');
 form.type.value = SERVERS[storedType] ? storedType : 'emby';
 form.url.value = store.get('serverUrl') || '';
 applyServerType(form.type.value);
+updateSaveWarning();
 applyLightMode(store.get('theme') === 'light');
 refreshConfigs();
 
@@ -512,6 +520,7 @@ form.url.addEventListener('input', () => {
 });
 form.url.addEventListener('change', () => store.set('serverUrl', form.url.value.trim()));
 form.key.addEventListener('input', resetLibraries);
+form.save.addEventListener('change', updateSaveWarning);
 
 // Enter in any field: load libraries, or scan once they're listed
 form.root.addEventListener('submit', event => {
