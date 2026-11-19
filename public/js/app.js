@@ -33,6 +33,13 @@ const form = {
     scan: $('scanBtn'),
 };
 const results = $('results');
+const summary = {
+    root: $('connectionSummary'),
+    server: document.querySelector('#connectionSummary .summary-server'),
+    detail: document.querySelector('#connectionSummary .summary-detail'),
+    rescan: $('rescanBtn'),
+    change: $('changeServerBtn'),
+};
 const cancelButton = $('cancelScan');
 
 const KINDS = {
@@ -162,7 +169,7 @@ function applyLightMode(light) {
     document.querySelector('.theme-toggle').textContent = light ? '☀️' : '🌓';
 }
 
-// ---------- Saved configs (stored server-side in /app/serverconfig) ----------
+// ---------- Saved configs (stored server-side in /config) ----------
 
 let savedConfigs = []; // { filename, displayName, serverType, serverUrl, hasKey }: never the key itself
 
@@ -349,6 +356,27 @@ async function loadLibraries() {
     }
 }
 
+// ---------- Collapsed form ----------
+// After a scan, the form folds into one line so the results start near the top of the page
+
+const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function collapseForm(libraries) {
+    summary.server.textContent = SERVERS[connection.serverType].label ?? connection.serverType;
+    const count = `${libraries.length} ${libraries.length === 1 ? 'library' : 'libraries'}`;
+    summary.detail.textContent = `${connection.serverUrl} · ${count}`;
+    summary.detail.title = libraries.map(lib => lib.name).join(', ');
+    form.root.hidden = true;
+    summary.root.hidden = false;
+    summary.root.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+}
+
+function expandForm() {
+    summary.root.hidden = true;
+    form.root.hidden = false;
+    form.scan.focus();
+}
+
 // ---------- Scan ----------
 
 let activeScan = null; // AbortController of the running scan
@@ -403,6 +431,7 @@ async function scan() {
     results.replaceChildren();
     activeScan = new AbortController();
     form.scan.disabled = true;
+    summary.rescan.disabled = true;
     try {
         const server = { serverType: connection.serverType, serverUrl: connection.serverUrl, apiKey: connection.apiKey };
         const client = clientFor(server, activeScan.signal);
@@ -441,6 +470,7 @@ async function scan() {
             scanned.push({ name: library.name, kind: library.kind, groups: shown, ignored });
         }
         renderSummaries(results, scanned, { setIgnored: ignoreHandler(server) });
+        collapseForm(libraries);
     } catch (err) {
         if (err.name === 'AbortError') {
             showMessage('Scan cancelled.');
@@ -450,6 +480,7 @@ async function scan() {
         }
     } finally {
         activeScan = null;
+        summary.rescan.disabled = false;
         progress.done();
         updatePickerState();
     }
@@ -488,6 +519,8 @@ form.root.addEventListener('submit', event => {
     if (connection) scan(); else loadLibraries();
 });
 form.scan.addEventListener('click', scan);
+summary.rescan.addEventListener('click', scan);
+summary.change.addEventListener('click', expandForm);
 form.reload.addEventListener('click', loadLibraries);
 form.toggleAll.addEventListener('click', () => {
     const boxes = libraryBoxes();

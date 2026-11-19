@@ -49,7 +49,7 @@ test('path tricks never reach server code, saved configs, or anything outside pu
         '/../server.js', '/..%2fserver.js', '/%2e%2e/server.js', '/%2e%2e%2fserver.js', '/.%2e/server.js',
         '/js/..%2f..%2fserver.js', '/..%5cserver.js', '/js/%2e%2e%5c%2e%2e%5cserver.js', '/..;/server.js',
         '/lib/upstream.js', '/package.json', '/test/helpers.js', '/entrypoint.sh',
-        '/../serverconfig/jellyfin_saved.json', '/..%2fserverconfig%2fjellyfin_saved.json', '/serverconfig/jellyfin_saved.json',
+        '/../config/jellyfin_saved.json', '/..%2fconfig%2fjellyfin_saved.json', '/config/jellyfin_saved.json',
         '/../../../../../../etc/passwd', '/..%2f..%2f..%2f..%2f..%2fetc%2fpasswd', '//etc/passwd', '/%2fetc%2fpasswd',
         '/index.html%00', '/index.html%00.js', '/%E0%A4%A',
     ];

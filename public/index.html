@@ -20,6 +20,17 @@
             <p class="credit">Created by SpaceInvaderOne · updated and maintained by Aerowinder</p>
         </header>
 
+        <section id="connectionSummary" class="card connection-summary" hidden aria-label="Scanned server">
+            <div class="summary-text">
+                <span class="summary-server"></span>
+                <span class="summary-detail"></span>
+            </div>
+            <div class="summary-actions">
+                <button type="button" id="rescanBtn" class="btn btn-secondary">Rescan</button>
+                <button type="button" id="changeServerBtn" class="btn btn-secondary">Change</button>
+            </div>
+        </section>
+
         <form id="scanForm" class="card" autocomplete="off">
             <label class="field">
                 <span class="field-label">Server</span>

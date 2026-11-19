@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-// Runs server.js from a temp directory, so serverconfig/ is a temp folder. setup(configDir)
+// Runs server.js from a temp directory, so config/ is a temp folder. setup(configDir)
 // runs first, to plant files; env adds environment variables. Everything the server logs is
 // kept, for checking.
 export async function startServer(setup, env = {}) {
     const workDir = await mkdtemp(path.join(tmpdir(), 'jembex-'));
-    const configDir = path.join(workDir, 'serverconfig');
+    const configDir = path.join(workDir, 'config');
     await setup?.(configDir);
 
     const port = 20000 + Math.floor(Math.random() * 20000);

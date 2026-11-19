@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Jembex-Dedupe</Name>
+  <Repository>ghcr.io/aerowinder/jembex-dedupe:latest</Repository>
+  <Registry>https://github.com/Aerowinder/jembex-dedupe/pkgs/container/jembex-dedupe</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Shell>sh</Shell>
+  <Support>https://github.com/Aerowinder/jembex-dedupe/issues</Support>
+  <Project>https://github.com/Aerowinder/jembex-dedupe</Project>
+  <Overview>Find duplicate movies and TV episodes on Jellyfin (including 12), Emby and Plex. Pick the libraries to scan, and Jembex Dedupe lists every title you have more than once, with the size, resolution, codecs and path of each copy, so you can decide what to keep. Read-only: it never changes or deletes anything on your media server. A fork of JellEmPlex Dedupe by SpaceinvaderOne. There is no login, so run it on a network you trust and don't expose it to the internet.</Overview>
+  <Category>MediaApp:Video Tools:</Category>
+  <WebUI>http://[IP]:[PORT:80]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Aerowinder/jembex-dedupe/main/unraid/jembex-dedupe.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Aerowinder/jembex-dedupe/main/public/logo.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <Requires/>
+  <Config Name="WebUI port" Target="80" Default="3369" Mode="tcp" Description="Port for the web page." Type="Port" Display="always" Required="true" Mask="false">3369</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/jembex-dedupe" Mode="rw" Description="Saved servers (including API keys) and ignore lists, one file per server." Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user/appdata/jembex-dedupe</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User the app runs as and that owns /config. 99 is Unraid's nobody." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group the app runs as and that owns /config. 100 is Unraid's users." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+  <Config Name="Allowed hosts" Target="ALLOWED_HOSTS" Default="" Mode="" Description="Optional. Comma-separated host names and IP addresses you open the app by (no ports), such as tower.local,192.168.1.10. Blocks DNS rebinding attacks." Type="Variable" Display="always" Required="false" Mask="false"/>
+</Container>

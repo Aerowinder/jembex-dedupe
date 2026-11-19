@@ -1,7 +1,7 @@
 .git
 .github
 node_modules
-serverconfig
+config
 test
 *.md
 docker-compose.yml

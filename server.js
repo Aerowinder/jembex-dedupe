@@ -1,17 +1,16 @@
 // The whole app in one process, on plain node:http (lib/http.js): serves the UI from public/,
-// keeps saved servers and ignore lists in serverconfig/ (in the working directory:
-// /app/serverconfig in the image), and proxies the scanner's requests to Jellyfin, Emby and Plex.
+// keeps one file per server in CONFIG_DIR (/config in the image; ./config when run from
+// a checkout), and proxies the scanner's requests to Jellyfin, Emby and Plex.
 //
 // API keys stay here. A saved key is never sent back to the browser: the browser names the
 // server (type + URL) and the proxy adds the saved key itself.
 //
-// serverconfig/<type>_<host>_<port>.json           saved server (URL + API key)
-// serverconfig/<type>_<host>_<port>.ignored.json   duplicates the user chose to ignore
+// <CONFIG_DIR>/<type>_<host>_<port>.json   one file per server: URL, API key and ignored duplicates
 // e.g. jellyfin_10.0.0.5_8096.json, or jellyfin_https_media.example.com.json for https://
 
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
-import { mkdir, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -22,7 +21,7 @@ import { RedirectError, SERVER_TYPES, UnreachableError, isAllowedPath, serverBas
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
-const SERVERCONFIG = path.resolve('serverconfig');
+const CONFIG_DIR = path.resolve(process.env.CONFIG_DIR || 'config');
 const PUBLIC_DIR = await realpath(path.join(ROOT, 'public'));
 const UPSTREAM_TIMEOUT_MS = 120_000;
 
@@ -47,9 +46,11 @@ const SECURITY_HEADERS = {
 // effect immediately (unchanged files come back as a cheap 304)
 const cacheControl = file => (/\.(js|css|html)$/.test(file) ? 'no-cache' : 'public, max-age=604800');
 
-// ---------- Saved servers ----------
+// ---------- Server files ----------
+// One file per server: { serverType, serverUrl, apiKey, savedAt, ignored: [{ key, label, paths, ignoredAt }] }
+// A server that isn't saved but has ignored duplicates has a file with no apiKey; it isn't
+// listed as a saved server.
 
-const IGNORED_SUFFIX = '.ignored.json';
 const TEMP_MARK = '.tmp-';
 
 // jellyfin_10.0.0.5_8096 for http://, jellyfin_https_10.0.0.5_8096 for https://, so the two
@@ -59,8 +60,8 @@ function serverFileStem(serverType, serverUrl) {
     const scheme = /^https:/i.test(url) ? 'https_' : '';
     return `${serverType}_${scheme}${url.replace(/^https?:\/\//i, '').replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 }
-const isConfigFile = (serverType, filename) =>
-    filename.startsWith(`${serverType}_`) && filename.endsWith('.json') && !filename.endsWith(IGNORED_SUFFIX);
+const serverFileName = (serverType, serverUrl) => `${serverFileStem(serverType, serverUrl)}.json`;
+const isConfigFile = (serverType, filename) => filename.startsWith(`${serverType}_`) && filename.endsWith('.json');
 
 // Writes go to a temp file that is then renamed over the target, so a crash or a stop
 // mid-write never leaves a half-written file. Leftover temp files are removed at startup.
@@ -75,7 +76,38 @@ async function writeFileSafely(file, data) {
     }
 }
 
-// Reject unknown server types, and filenames that aren't one of that type's saved servers
+// null if the file doesn't exist; an unreadable file counts as empty, with a warning
+async function readServerFile(filename) {
+    try {
+        const data = JSON.parse(await readFile(path.join(CONFIG_DIR, filename), 'utf8'));
+        return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    } catch (err) {
+        if (err.code === 'ENOENT') return null;
+        console.warn(`Unreadable server file ${filename}: ${err.message}`);
+        return {};
+    }
+}
+
+const ignoredEntries = data => (Array.isArray(data?.ignored) ? data.ignored.filter(e => e && typeof e.key === 'string') : []);
+
+// Every change to a server file goes through here, one at a time, so a save and two quick
+// Ignore clicks can't overwrite each other. change(current or null) returns the new contents,
+// or null to remove the file.
+let writeQueue = Promise.resolve();
+function updateServerFile(filename, change) {
+    const run = writeQueue.then(async () => {
+        const next = await change(await readServerFile(filename));
+        const file = path.join(CONFIG_DIR, filename);
+        if (next) await writeFileSafely(file, JSON.stringify(next, null, 2));
+        else await rm(file, { force: true });
+        forgetSavedServers();
+        return next;
+    });
+    writeQueue = run.catch(() => {});
+    return run;
+}
+
+// Reject unknown server types, and filenames that aren't one of that type's server files
 // (which also rules out anything that could leave the config folder)
 function checkParams({ serverType, filename }) {
     if (!SERVER_TYPES.includes(serverType)) throw new HttpError(400, 'Invalid server type');
@@ -84,17 +116,23 @@ function checkParams({ serverType, filename }) {
     }
 }
 
-// Every saved server, keys included: for use here only, never sent as-is
+function checkServerUrl(serverUrl) {
+    try {
+        serverBaseUrl(serverUrl);
+    } catch (err) {
+        throw new HttpError(400, err.message);
+    }
+}
+
+// ---------- Saved servers ----------
+
+// Every saved server (a file with a key), keys included: for use here only, never sent as-is
 async function readAllSavedServers() {
-    const files = (await readdir(SERVERCONFIG).catch(() => [])).filter(f => SERVER_TYPES.some(type => isConfigFile(type, f)));
+    const files = (await readdir(CONFIG_DIR).catch(() => [])).filter(f => SERVER_TYPES.some(type => isConfigFile(type, f)));
     const configs = [];
     for (const filename of files) {
-        try {
-            const config = JSON.parse(await readFile(path.join(SERVERCONFIG, filename), 'utf8'));
-            if (config && typeof config === 'object') configs.push({ ...config, filename });
-        } catch (err) {
-            console.warn(`Skipping unreadable config ${filename}: ${err.message}`);
-        }
+        const config = await readServerFile(filename);
+        if (config?.apiKey) configs.push({ ...config, filename });
     }
     return configs;
 }
@@ -104,7 +142,7 @@ async function readAllSavedServers() {
 // within a few seconds.
 const SAVED_CACHE_MS = 3000;
 let savedCache = null; // { at, configs: Promise }
-const forgetSavedServers = () => { savedCache = null; };
+function forgetSavedServers() { savedCache = null; }
 
 async function readSavedServers(serverType) {
     if (!savedCache || Date.now() - savedCache.at > SAVED_CACHE_MS) {
@@ -121,52 +159,45 @@ async function findSavedServer(serverType, serverUrl) {
 async function listConfigs({ res, params }) {
     checkParams(params);
     const configs = await readSavedServers(params.serverType);
-    sendJson(res, 200, configs.map(({ filename, serverType, serverUrl, savedAt, apiKey }) => ({
+    sendJson(res, 200, configs.map(({ filename, serverType, serverUrl, savedAt }) => ({
         filename,
         displayName: serverUrl || filename.replace(/\.json$/, ''),
         serverType,
         serverUrl,
         savedAt,
-        hasKey: Boolean(apiKey),
+        hasKey: true,
     })));
 }
 
+// Saving again replaces the URL and key, and keeps the ignore list
 async function saveConfig({ req, res, params }) {
     checkParams(params);
     const { serverUrl, apiKey } = await readJson(req);
     if (typeof serverUrl !== 'string' || typeof apiKey !== 'string' || !serverUrl || !apiKey) {
         throw new HttpError(400, 'Server URL and API key are required');
     }
-    try {
-        serverBaseUrl(serverUrl);
-    } catch (err) {
-        throw new HttpError(400, err.message);
-    }
+    checkServerUrl(serverUrl);
     const { serverType } = params;
-    const filename = `${serverFileStem(serverType, serverUrl)}.json`;
-    const config = { serverType, serverUrl: normalizeServerUrl(serverUrl), apiKey, savedAt: new Date().toISOString() };
-    // An older file for the same address (named another way by an earlier version) is
-    // replaced. Read fresh, not from the cache, so a file added by hand a moment ago counts.
-    forgetSavedServers();
-    const stale = (await readSavedServers(serverType)).filter(c => c.filename !== filename
-        && typeof c.serverUrl === 'string' && normalizeServerUrl(c.serverUrl) === config.serverUrl);
-    await writeFileSafely(path.join(SERVERCONFIG, filename), JSON.stringify(config, null, 2));
-    await Promise.all(stale.map(c => rm(path.join(SERVERCONFIG, c.filename), { force: true })));
-    forgetSavedServers();
+    const filename = serverFileName(serverType, serverUrl);
+    await updateServerFile(filename, current => ({
+        serverType, serverUrl: normalizeServerUrl(serverUrl), apiKey, savedAt: new Date().toISOString(),
+        ignored: ignoredEntries(current),
+    }));
     sendJson(res, 200, { message: 'Config saved', filename });
 }
 
+// Removes the key. The ignore list stays, in case the server is saved again; with nothing
+// ignored, the file goes.
 async function deleteConfig({ res, params }) {
     checkParams(params);
-    try {
-        // The server's ignore list stays, in case it's saved again
-        await rm(path.join(SERVERCONFIG, params.filename));
-    } catch (err) {
-        if (err.code === 'ENOENT') throw new HttpError(404, 'Config not found');
-        throw err;
-    } finally {
-        forgetSavedServers();
-    }
+    let found = false;
+    await updateServerFile(params.filename, current => {
+        found = Boolean(current?.apiKey);
+        if (!current) return null;
+        const ignored = ignoredEntries(current);
+        return ignored.length ? { serverType: current.serverType, serverUrl: current.serverUrl, ignored } : null;
+    });
+    if (!found) throw new HttpError(404, 'Config not found');
     sendJson(res, 200, { message: 'Config deleted' });
 }
 
@@ -182,11 +213,7 @@ async function proxyMedia({ req, res, url, params }) {
 
     if (!SERVER_TYPES.includes(serverType)) throw new HttpError(400, 'Invalid server type');
     if (!isAllowedPath(serverType, upstreamPath)) throw new HttpError(404, 'Not a scanner request');
-    try {
-        serverBaseUrl(serverUrl);
-    } catch (err) {
-        throw new HttpError(400, err.message);
-    }
+    checkServerUrl(serverUrl);
 
     let apiKey = req.headers['x-server-key'];
     if (!apiKey) {
@@ -218,31 +245,7 @@ async function proxyMedia({ req, res, url, params }) {
 }
 
 // ---------- Ignored duplicates ----------
-// One file per server, saved or not: { entries: [{ key, label, paths, ignoredAt }] }
-
-const ignoreFile = (serverType, serverUrl) => path.join(SERVERCONFIG, `${serverFileStem(serverType, serverUrl)}${IGNORED_SUFFIX}`);
-
-async function readIgnored(file) {
-    try {
-        const { entries } = JSON.parse(await readFile(file, 'utf8'));
-        return Array.isArray(entries) ? entries.filter(e => e && typeof e.key === 'string') : [];
-    } catch (err) {
-        if (err.code !== 'ENOENT') console.warn(`Unreadable ignore list ${file}: ${err.message}`);
-        return [];
-    }
-}
-
-// Changes run one at a time, so two quick clicks can't overwrite each other
-let ignoreQueue = Promise.resolve();
-function updateIgnored(file, change) {
-    const run = ignoreQueue.then(async () => {
-        const entries = change(await readIgnored(file));
-        await writeFileSafely(file, JSON.stringify({ entries }, null, 2));
-        return entries;
-    });
-    ignoreQueue = run.catch(() => {});
-    return run;
-}
+// Kept in the server's file, saved or not
 
 function ignoreFileFor(serverType, serverUrl) {
     try {
@@ -250,33 +253,41 @@ function ignoreFileFor(serverType, serverUrl) {
     } catch {
         throw new HttpError(400, 'Invalid server URL');
     }
-    return ignoreFile(serverType, serverUrl);
+    return serverFileName(serverType, serverUrl);
+}
+
+function updateIgnored(serverType, serverUrl, change) {
+    return updateServerFile(ignoreFileFor(serverType, serverUrl), current => {
+        const ignored = change(ignoredEntries(current));
+        if (current?.apiKey || ignored.length) return { ...current, serverType, serverUrl: current?.serverUrl || normalizeServerUrl(serverUrl), ignored };
+        return null; // not saved, and nothing left to ignore
+    });
 }
 
 async function listIgnored({ res, url, params }) {
     checkParams(params);
-    const file = ignoreFileFor(params.serverType, url.searchParams.get('serverUrl'));
-    sendJson(res, 200, { entries: await readIgnored(file) });
+    const filename = ignoreFileFor(params.serverType, url.searchParams.get('serverUrl'));
+    sendJson(res, 200, { entries: ignoredEntries(await readServerFile(filename)) });
 }
 
 async function addIgnored({ req, res, params }) {
     checkParams(params);
     const { serverUrl, key, label, paths } = await readJson(req);
-    const file = ignoreFileFor(params.serverType, serverUrl);
+    ignoreFileFor(params.serverType, serverUrl);
     if (typeof key !== 'string' || !key || !Array.isArray(paths) || !paths.every(p => typeof p === 'string')) {
         throw new HttpError(400, 'key and paths are required');
     }
     const entry = { key, label: String(label || key), paths, ignoredAt: new Date().toISOString() };
-    await updateIgnored(file, entries => [...entries.filter(e => e.key !== key), entry]);
+    await updateIgnored(params.serverType, serverUrl, entries => [...entries.filter(e => e.key !== key), entry]);
     sendJson(res, 200, { message: 'Ignored', entry });
 }
 
 async function removeIgnored({ req, res, params }) {
     checkParams(params);
     const { serverUrl, key } = await readJson(req);
-    const file = ignoreFileFor(params.serverType, serverUrl);
+    ignoreFileFor(params.serverType, serverUrl);
     if (typeof key !== 'string' || !key) throw new HttpError(400, 'key is required');
-    await updateIgnored(file, entries => entries.filter(e => e.key !== key));
+    await updateIgnored(params.serverType, serverUrl, entries => entries.filter(e => e.key !== key));
     sendJson(res, 200, { message: 'Restored' });
 }
 
@@ -357,40 +368,15 @@ const server = http.createServer(async (req, res) => {
 
 // ---------- Start ----------
 
-// Up to 2.0.x, saved servers lived in serverconfig/<type>/<host>_<port>.json
-async function migrateOldLayout() {
-    for (const type of SERVER_TYPES) {
-        const dir = path.join(SERVERCONFIG, type);
-        const files = await readdir(dir).catch(() => null);
-        if (!files) continue;
-        for (const file of files.filter(f => f.endsWith('.json'))) {
-            // Name it the way a save would now, so saving the server again updates this file
-            let target = path.join(SERVERCONFIG, `${type}_${file}`);
-            try {
-                const { serverUrl } = JSON.parse(await readFile(path.join(dir, file), 'utf8'));
-                if (serverUrl) target = path.join(SERVERCONFIG, `${serverFileStem(type, serverUrl)}.json`);
-            } catch { /* unreadable: keep its name */ }
-            if (await readFile(target).then(() => true, () => false)) {
-                console.warn(`Not moving ${type}/${file}: ${path.basename(target)} already exists`);
-                continue;
-            }
-            await rename(path.join(dir, file), target);
-            console.log(`Moved ${type}/${file} to ${path.basename(target)}`);
-        }
-        await rmdir(dir).catch(() => { /* not empty: leave it */ });
-    }
-}
-
 // A write interrupted by a crash leaves only its temp file; the real file is intact
 async function removeTempFiles() {
-    for (const file of await readdir(SERVERCONFIG)) {
-        if (file.includes(TEMP_MARK)) await rm(path.join(SERVERCONFIG, file), { force: true });
+    for (const file of await readdir(CONFIG_DIR)) {
+        if (file.includes(TEMP_MARK)) await rm(path.join(CONFIG_DIR, file), { force: true });
     }
 }
 
-await mkdir(SERVERCONFIG, { recursive: true });
+await mkdir(CONFIG_DIR, { recursive: true });
 await removeTempFiles();
-await migrateOldLayout();
 server.on('error', err => {
     console.error(`Failed to start server on port ${PORT}: ${err.message}`);
     if (err.code === 'EACCES') console.error('Ports below 1024 need extra permissions here; set PORT to 1024 or above and map that port instead.');
@@ -399,7 +385,7 @@ server.on('error', err => {
 // No address: IPv6 and IPv4 both (just IPv4 where IPv6 is off), so "localhost" works either way
 server.listen(PORT, () => {
     const hosts = ALLOWED_HOSTS.size ? `, allowed hosts: ${[...ALLOWED_HOSTS].join(', ')}` : '';
-    console.log(`Jembex Dedupe on port ${PORT}, configs in ${SERVERCONFIG}${hosts}`);
+    console.log(`Jembex Dedupe on port ${PORT}, configs in ${CONFIG_DIR}${hosts}`);
 });
 
 // As the container's main process, node gets no default handling for these: exit promptly on

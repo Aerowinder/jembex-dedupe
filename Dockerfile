@@ -4,7 +4,7 @@ FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6
 RUN apk add --no-cache su-exec
 
 WORKDIR /app
-ENV NODE_ENV=production PORT=80
+ENV NODE_ENV=production PORT=80 CONFIG_DIR=/config
 
 # The app runs as a regular user but still listens on port 80, so existing port mappings
 # keep working: give node just the "bind ports below 1024" capability

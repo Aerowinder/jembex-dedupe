@@ -28,11 +28,10 @@ before(async () => {
     await new Promise(resolve => jellyfin.listen(0, '127.0.0.1', resolve));
     jellyfinUrl = `http://127.0.0.1:${jellyfin.address().port}`;
 
-    // A 2.0.x install: one saved server per type folder
     app = await startServer(async dir => {
-        await mkdir(path.join(dir, 'emby'), { recursive: true });
-        await writeFile(path.join(dir, 'emby', '10.0.0.9_8096_.json'),
-            JSON.stringify({ serverType: 'emby', serverUrl: 'http://10.0.0.9:8096/', apiKey: 'old' }));
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, 'emby_10.0.0.9_8096.json'),
+            JSON.stringify({ serverType: 'emby', serverUrl: 'http://10.0.0.9:8096', apiKey: 'old' }));
         // left behind by a save that was interrupted
         await writeFile(path.join(dir, 'emby_10.0.0.9_8096.json.tmp-1-abc'), '{"half');
     });
@@ -55,14 +54,13 @@ const media = (route, server) => fetch(`${API}/api/media${route}`, {
     }).filter(([, v]) => v !== undefined)),
 });
 
-test('startup: 2.0.x saved servers move out of their type folders; interrupted saves are cleared', async () => {
-    const files = await readdir(configDir);
-    assert.deepEqual(files, ['emby_10.0.0.9_8096.json'], 'type folder and temp file removed, file named from its URL');
+test('startup: interrupted saves are cleared', async () => {
+    assert.deepEqual(await readdir(configDir), ['emby_10.0.0.9_8096.json'], 'temp file removed');
     const list = await (await fetch(`${API}/api/configs/emby`)).json();
-    assert.deepEqual(list.map(c => [c.serverUrl, c.hasKey]), [['http://10.0.0.9:8096/', true]]);
+    assert.deepEqual(list.map(c => [c.serverUrl, c.hasKey]), [['http://10.0.0.9:8096', true]]);
 });
 
-test('save, list and delete a server: files sit flat in serverconfig/, keys never come back', async () => {
+test('save, list and delete a server: files sit flat in config/, keys never come back', async () => {
     const saved = await (await post('jellyfin', { serverUrl: '10.0.0.5:8096/', apiKey: 'k' })).json();
     assert.equal(saved.filename, 'jellyfin_10.0.0.5_8096.json');
     assert.equal(saved.config, undefined, 'the save response has no key either');
@@ -84,18 +82,15 @@ test('save, list and delete a server: files sit flat in serverconfig/, keys neve
     assert.deepEqual(await (await fetch(`${API}/api/configs/jellyfin`)).json(), []);
 });
 
-test('saving: http:// and https:// get separate files; an older file for the same address is replaced', async () => {
+test('saving: http:// and https:// get separate files; the same address saved twice is one file', async () => {
     const plain = await (await post('plex', { serverUrl: 'http://10.0.0.7:32400', apiKey: 'a' })).json();
     const secure = await (await post('plex', { serverUrl: 'https://10.0.0.7:32400', apiKey: 'b' })).json();
     assert.deepEqual([plain.filename, secure.filename], ['plex_10.0.0.7_32400.json', 'plex_https_10.0.0.7_32400.json']);
 
-    // e.g. from 2.0.x, saved with a trailing slash; added by hand just now, so not yet cached
-    await writeFile(path.join(configDir, 'plex_old-name.json'), JSON.stringify({ serverType: 'plex', serverUrl: 'http://10.0.0.8:32400/', apiKey: 'old' }));
-    await post('plex', { serverUrl: '10.0.0.8:32400', apiKey: 'new' });
-    const files = (await readdir(configDir)).filter(f => f.startsWith('plex_'));
-    assert.ok(!files.includes('plex_old-name.json'), 'the older file is gone');
+    const again = await (await post('plex', { serverUrl: '10.0.0.7:32400/', apiKey: 'c' })).json();
+    assert.equal(again.filename, plain.filename);
     const list = await (await fetch(`${API}/api/configs/plex`)).json();
-    assert.equal(list.filter(c => c.serverUrl === 'http://10.0.0.8:32400').length, 1, 'listed once');
+    assert.equal(list.filter(c => c.serverUrl === 'http://10.0.0.7:32400').length, 1, 'listed once');
 });
 
 test('listens on IPv6 as well as IPv4', async t => {
@@ -115,7 +110,6 @@ test('bad input is rejected', async () => {
     assert.equal((await fetch(`${API}/api/configs/..%2F..%2Fetc`)).status, 400, 'bad server type');
     assert.equal((await json('DELETE', '/api/configs/jellyfin/..%2F..%2Fserver.js')).status, 400, 'path traversal');
     assert.equal((await json('DELETE', '/api/configs/plex/jellyfin_broken.json')).status, 400, "another type's file");
-    assert.equal((await json('DELETE', '/api/configs/jellyfin/jellyfin_x.ignored.json')).status, 400, 'an ignore list');
 });
 
 test('proxy: the saved key is used when none is typed; a typed key wins; the query is forwarded', async () => {
@@ -165,10 +159,35 @@ test('ignore list: add, replace, list, restore', async () => {
     assert.equal((await json('DELETE', url, { serverUrl: jellyfinUrl, key: 'movies:Heat_1995' })).status, 200);
     assert.deepEqual((await list()).map(e => e.key).sort(), ['movies:Alien_1979', 'tv:9|1|3']);
 
-    const files = await readdir(configDir);
-    assert.ok(files.includes(`jellyfin_127.0.0.1_${new URL(jellyfinUrl).port}.ignored.json`), 'stored next to the saved server');
+    // In the saved server's own file, which keeps the key; saving again keeps the list
+    const file = path.join(configDir, `jellyfin_127.0.0.1_${new URL(jellyfinUrl).port}.json`);
+    const stored = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(stored.apiKey, KEY);
+    assert.deepEqual(stored.ignored.map(e => e.key).sort(), ['movies:Alien_1979', 'tv:9|1|3']);
+    await post('jellyfin', { serverUrl: jellyfinUrl, apiKey: KEY });
+    assert.equal((await list()).length, 2, 'kept when the server is saved again');
     assert.equal((await json('POST', url, { serverUrl: jellyfinUrl, key: 'k' })).status, 400, 'paths required');
     assert.equal((await json('POST', '/api/ignored/jellyfin', { serverUrl: 'javascript:x', key: 'k', paths: [] })).status, 400);
+});
+
+test('ignore list for an unsaved server, and after the server is deleted', async () => {
+    const serverUrl = 'http://10.0.0.20:8096';
+    const file = path.join(configDir, 'emby_10.0.0.20_8096.json');
+    const ignoreUrl = `/api/ignored/emby?serverUrl=${encodeURIComponent(serverUrl)}`;
+    await json('POST', '/api/ignored/emby', { serverUrl, key: 'movies:Up_2009', paths: ['/u'] });
+    assert.equal(JSON.parse(await readFile(file, 'utf8')).apiKey, undefined, 'no key stored');
+    const listed = async () => (await (await fetch(`${API}/api/configs/emby`)).json()).map(c => c.serverUrl);
+    assert.ok(!(await listed()).includes(serverUrl), 'not listed as a saved server');
+
+    const { filename } = await (await post('emby', { serverUrl, apiKey: 'e' })).json();
+    assert.ok((await listed()).includes(serverUrl));
+    assert.equal((await json('DELETE', `/api/configs/emby/${filename}`)).status, 200);
+    assert.equal(JSON.parse(await readFile(file, 'utf8')).apiKey, undefined, 'key removed on delete');
+    assert.equal((await (await fetch(`${API}${ignoreUrl}`)).json()).entries.length, 1, 'ignore list kept');
+    assert.equal((await json('DELETE', `/api/configs/emby/${filename}`)).status, 404, 'no longer saved');
+
+    await json('DELETE', '/api/ignored/emby', { serverUrl, key: 'movies:Up_2009' });
+    assert.ok(!(await readdir(configDir)).includes(path.basename(file)), 'file removed once empty');
 });
 
 test('the UI is served; server code and saved configs are not', async () => {
@@ -179,7 +198,7 @@ test('the UI is served; server code and saved configs are not', async () => {
     assert.equal(script.status, 200);
     assert.equal(script.headers.get('cache-control'), 'no-cache', 'updates take effect immediately');
     assert.equal(script.headers.get('x-content-type-options'), 'nosniff');
-    for (const p of ['/server.js', '/lib/upstream.js', '/package.json', '/serverconfig/emby_10.0.0.9_8096.json', '/emby_10.0.0.9_8096.json']) {
+    for (const p of ['/server.js', '/lib/upstream.js', '/package.json', '/config/emby_10.0.0.9_8096.json', '/emby_10.0.0.9_8096.json']) {
         assert.equal((await fetch(`${API}${p}`)).status, 404, p);
     }
     assert.equal((await json('DELETE', '/api/delete-file')).status, 404, 'removed endpoints stay removed');
